@@ -1,0 +1,10 @@
+GMAIL_CLIENT_EMAIL=service-account@your-project.iam.gserviceaccount.com
+GMAIL_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GMAIL_SENDER_EMAIL=alerts@yourdomain.com
+RECIPIENT_EMAIL=you@example.com
+GITHUB_TOKEN=ghp_your_readonly_pat
+TRIGGER_SECRET=some-long-random-string
+CONFIRM_SECRET=shared-secret-with-web
+# Optional: bias ranking, comma-separated keyword:weight. Empty = neutral.
+PRIORITY_KEYWORDS=
+UNSUBSCRIBE_BASE_URL=https://trends.softween.com
