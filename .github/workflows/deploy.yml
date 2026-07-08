@@ -5,20 +5,25 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: this workflow does not use GITHUB_TOKEN except for the
+# read-only checkout of a public repo. Drop every other default scope.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - run: npm ci
       # Doppler injects CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID at runtime.
       # The only GitHub-stored secret is a read-only Doppler service token
       # scoped to the softween-trending/prd config. The Cloudflare token never
-      # lives in GitHub.
-      - uses: dopplerhq/cli-action@v3
+      # lives in GitHub. Third-party action pinned to a full commit SHA.
+      - uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1 # v3
       - name: Deploy Worker
         run: doppler run -- npx wrangler deploy
         env:
