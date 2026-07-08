@@ -1,0 +1,25 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Doppler injects CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID at runtime.
+      # The only GitHub-stored secret is a read-only Doppler service token
+      # scoped to the softween-trending/prd config. The Cloudflare token never
+      # lives in GitHub.
+      - uses: dopplerhq/cli-action@v3
+      - name: Deploy Worker
+        run: doppler run -- npx wrangler deploy
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
