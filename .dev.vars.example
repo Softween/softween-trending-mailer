@@ -1,8 +1,8 @@
 GMAIL_CLIENT_EMAIL=service-account@your-project.iam.gserviceaccount.com
-GMAIL_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GMAIL_PRIVATE_KEY="paste-service-account-private-key-with-escaped-newlines"
 GMAIL_SENDER_EMAIL=alerts@yourdomain.com
 RECIPIENT_EMAIL=you@example.com
-GITHUB_TOKEN=ghp_your_readonly_pat
+GITHUB_TOKEN=your-github-readonly-pat
 TRIGGER_SECRET=some-long-random-string
 CONFIRM_SECRET=shared-secret-with-web
 # Optional: bias ranking, comma-separated keyword:weight. Empty = neutral.
