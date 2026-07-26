@@ -1,4 +1,5 @@
 import type { EnrichedRepo, TrendingDigest } from '../types';
+import type { ExecutiveSummary } from './exec-summary';
 
 export function escapeHtml(str: string): string {
   return str
@@ -21,10 +22,10 @@ const PERIOD_BADGE: Record<TrendPeriod, { label: string; bg: string; color: stri
   monthly: { label: '📈 Aylik Trend', bg: '#2a1a3a', color: '#bc8cff' },
 };
 
-const PERIOD_META: Record<TrendPeriod, { subject: string; title: string; emoji: string }> = {
-  daily: { subject: 'Gunluk', title: 'Gunluk Trending', emoji: '📅' },
-  weekly: { subject: 'Haftalik', title: 'Haftalik Trending', emoji: '📊' },
-  monthly: { subject: 'Aylik', title: 'Aylik Trending', emoji: '📈' },
+const PERIOD_META: Record<TrendPeriod, { title: string; emoji: string }> = {
+  daily: { title: 'Gunluk Trending', emoji: '📅' },
+  weekly: { title: 'Haftalik Trending', emoji: '📊' },
+  monthly: { title: 'Aylik Trending', emoji: '📈' },
 };
 
 function buildRepoCard(repo: EnrichedRepo, rank: number, period: TrendPeriod): string {
@@ -106,14 +107,86 @@ function buildSection(title: string, emoji: string, repos: EnrichedRepo[], perio
     ${repoCards}`;
 }
 
-export function buildEmailSubject(date: Date, period: TrendPeriod): string {
+/**
+ * Weekly and monthly repos ship as compact rows instead of full cards so the
+ * whole digest fits in one email under Gmail's ~102KB clipping threshold.
+ */
+export const COMPACT_LIMIT = 15;
+
+function buildCompactRow(repo: EnrichedRepo, rank: number, period: TrendPeriod): string {
+  const badge = PERIOD_BADGE[period];
+  const desc = repo.description ?? repo.aiSummary?.summary ?? '';
+  const trimmed = desc.length > 160 ? `${desc.slice(0, 160)}…` : desc;
+
+  return `
+    <tr>
+      <td style="padding:10px 24px;border-bottom:1px solid #21262d;">
+        <div style="font-size:14px;">
+          <span style="display:inline-block;background:#30363d;color:#7d8590;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:8px;">#${rank}</span>
+          <a href="${repo.url}" style="color:#58a6ff;font-weight:600;text-decoration:none;">${escapeHtml(repo.fullName)}</a>
+          ${repo.periodStars > 0 ? `<span style="color:${badge.color};font-size:12px;margin-left:8px;">🔥 +${formatNumber(repo.periodStars)}</span>` : ''}
+          ${repo.language ? `<span style="color:#7d8590;font-size:12px;margin-left:8px;">${escapeHtml(repo.language)}</span>` : ''}
+        </div>
+        ${trimmed ? `<div style="margin-top:4px;color:#8b949e;font-size:12px;line-height:1.4;">${escapeHtml(trimmed)}</div>` : ''}
+      </td>
+    </tr>`;
+}
+
+function buildCompactSection(repos: EnrichedRepo[], period: TrendPeriod): string {
+  if (repos.length === 0) return '';
+
+  const meta = PERIOD_META[period];
+  const shown = repos.slice(0, COMPACT_LIMIT);
+  const omitted = repos.length - shown.length;
+  const rows = shown.map((repo, i) => buildCompactRow(repo, i + 1, period)).join('');
+
+  return `
+    <tr>
+      <td style="padding:24px 20px 12px;">
+        <h2 style="margin:0;color:#e6edf3;font-size:20px;font-weight:600;">
+          ${meta.emoji} ${meta.title} <span style="color:#7d8590;font-weight:400;font-size:14px;">(${shown.length}${omitted > 0 ? ` / ${repos.length}` : ''} repo)</span>
+        </h2>
+      </td>
+    </tr>
+    ${rows}
+    ${omitted > 0 ? `
+    <tr>
+      <td style="padding:10px 24px 0;color:#7d8590;font-size:12px;">
+        + ${omitted} repo daha — tamami <a href="https://trends.softween.com" style="color:#58a6ff;text-decoration:none;">trends.softween.com</a>'da.
+      </td>
+    </tr>` : ''}`;
+}
+
+export function buildExecSummarySection(summary: ExecutiveSummary): string {
+  const themesHtml = summary.themes
+    .map(
+      (theme) => `
+        <div style="margin-top:12px;">
+          <div style="color:#e6edf3;font-size:13px;font-weight:600;margin-bottom:2px;">${escapeHtml(theme.title)}</div>
+          <div style="color:#8b949e;font-size:13px;line-height:1.5;">${escapeHtml(theme.body)}</div>
+        </div>`,
+    )
+    .join('');
+
+  return `
+    <tr>
+      <td style="padding:24px 20px 4px;">
+        <h2 style="margin:0 0 12px;color:#e6edf3;font-size:20px;font-weight:600;">📋 Yonetici Ozeti</h2>
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px 18px;">
+          <div style="color:#c9d1d9;font-size:14px;line-height:1.6;">${escapeHtml(summary.overview)}</div>
+          ${themesHtml}
+        </div>
+      </td>
+    </tr>`;
+}
+
+export function buildEmailSubject(date: Date): string {
   const formatted = date.toLocaleDateString('tr-TR', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
-  const label = PERIOD_META[period].subject;
-  return `🔥 GitHub Trending Digest (${label}) — ${formatted}`;
+  return `🔥 GitHub Trending Digest — ${formatted}`;
 }
 
 export function buildConfirmEmailHtml(confirmUrl: string): string {
@@ -132,14 +205,22 @@ export function buildConfirmEmailHtml(confirmUrl: string): string {
 </body></html>`;
 }
 
+/**
+ * One combined digest email: executive summary, full daily cards, then compact
+ * weekly and monthly lists. Replaces the previous one-email-per-period fan-out.
+ */
 export function buildEmailHtml(
   digest: TrendingDigest,
-  period: TrendPeriod,
+  execSummary: ExecutiveSummary | null,
   unsubscribeUrl?: string,
 ): string {
-  const repos = digest[period];
-  const meta = PERIOD_META[period];
-  const section = buildSection(meta.title, meta.emoji, repos, period);
+  const totalRepos = digest.daily.length + digest.weekly.length + digest.monthly.length;
+  const body = [
+    execSummary ? buildExecSummarySection(execSummary) : '',
+    buildSection(PERIOD_META.daily.title, PERIOD_META.daily.emoji, digest.daily, 'daily'),
+    buildCompactSection(digest.weekly, 'weekly'),
+    buildCompactSection(digest.monthly, 'monthly'),
+  ].join('');
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -153,11 +234,11 @@ export function buildEmailHtml(
           <tr>
             <td style="padding:32px 20px 16px;text-align:center;border-bottom:1px solid #30363d;">
               <h1 style="margin:0 0 8px;color:#e6edf3;font-size:24px;">🔥 GitHub Trending Digest</h1>
-              <p style="margin:0;color:#7d8590;font-size:14px;">${digest.generatedAt} · ${meta.title} · ${repos.length} repo</p>
+              <p style="margin:0;color:#7d8590;font-size:14px;">${digest.generatedAt} · Gunluk, Haftalik ve Aylik trendler bir arada · ${totalRepos} repo</p>
             </td>
           </tr>
 
-          ${section}
+          ${body}
 
           <!-- Footer -->
           <tr>

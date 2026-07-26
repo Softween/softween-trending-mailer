@@ -9,12 +9,12 @@ const digest = {
 
 describe('unsubscribe footer', () => {
   it('includes personalized unsubscribe link when url provided', () => {
-    const html = buildEmailHtml(digest, 'daily', 'https://trends.softween.com/abonelik-iptal?token=abc');
+    const html = buildEmailHtml(digest, null, 'https://trends.softween.com/abonelik-iptal?token=abc');
     expect(html).toContain('abonelik-iptal?token=abc');
     expect(html.toLowerCase()).toContain('abonelik');
   });
   it('omits unsubscribe link when url not provided (internal copy)', () => {
-    const html = buildEmailHtml(digest, 'daily');
+    const html = buildEmailHtml(digest, null);
     expect(html).not.toContain('abonelik-iptal?token=');
   });
 });

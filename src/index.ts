@@ -5,6 +5,7 @@ import { fetchReadmesBatch, fetchRepoMetaBatch } from './lib/github-api';
 import { summarizeReposBatch } from './lib/ai-summarizer';
 import { buildEmailHtml, buildEmailSubject, buildConfirmEmailHtml } from './lib/email-builder';
 import { sendEmail } from './lib/gmail';
+import { generateExecutiveSummary } from './lib/exec-summary';
 import { saveSnapshot, getActiveSubscribers } from './lib/db';
 import { generateBlogPost, saveBlogPost } from './lib/blog-generator';
 import { parsePriorityKeywords, sortByPriority } from './lib/priority-ranking';
@@ -151,23 +152,25 @@ async function runDigest(env: Env): Promise<{ success: boolean; repoCount: numbe
       console.error(`[digest] Blog generation failed: ${blogErr instanceof Error ? blogErr.message : String(blogErr)}`);
     }
 
-    // 6. Build and send one email per period (Gmail clips >102KB)
-    console.log('[digest] Building and sending emails per period...');
-    const periods: Array<'daily' | 'weekly' | 'monthly'> = ['daily', 'weekly', 'monthly'];
-    const now = new Date();
-    for (const period of periods) {
-      if (digest[period].length === 0) {
-        console.log(`[digest] Skipping ${period} (no repos)`);
-        continue;
-      }
-      const html = buildEmailHtml(digest, period);
-      const subject = buildEmailSubject(now, period);
-      await sendEmail(env, {
-        to: env.RECIPIENT_EMAIL,
-        subject,
-        html,
-      });
+    // 5.9 Executive summary across all three periods (null-tolerant: the digest
+    // still ships without it, the reason is logged inside the generator)
+    const execSummary = await generateExecutiveSummary(env.AI, digest);
+    if (!execSummary) {
+      console.log('[digest] No executive summary — sending digest without it');
     }
+
+    // 6. Build and send ONE combined email. Weekly/monthly render as compact
+    // rows so the single message stays under Gmail's ~102KB clipping threshold.
+    console.log('[digest] Building and sending combined digest email...');
+    const now = new Date();
+    const combinedHtml = buildEmailHtml(digest, execSummary);
+    const combinedSubject = buildEmailSubject(now);
+    console.log(`[digest] Combined email size: ${combinedHtml.length} bytes`);
+    await sendEmail(env, {
+      to: env.RECIPIENT_EMAIL,
+      subject: combinedSubject,
+      html: combinedHtml,
+    });
 
     // 7. Fan out the DAILY digest to opted-in subscribers (personalized unsubscribe)
     // Wrapped in its own try/catch: subscriber fan-out issues (including a transient
@@ -176,8 +179,7 @@ async function runDigest(env: Env): Promise<{ success: boolean; repoCount: numbe
     try {
       if (digest.daily.length > 0) {
         const subs = await getActiveSubscribers(env.DB);
-        console.log(`[digest] Fanning out daily digest to ${subs.length} subscribers`);
-        const subject = buildEmailSubject(now, 'daily');
+        console.log(`[digest] Fanning out combined digest to ${subs.length} subscribers`);
         const unsubBase = env.UNSUBSCRIBE_BASE_URL ?? 'https://trends.softween.com';
         let ok = 0;
         let failed = 0;
@@ -186,8 +188,8 @@ async function runDigest(env: Env): Promise<{ success: boolean; repoCount: numbe
           try {
             await sendEmail(env, {
               to: sub.email,
-              subject,
-              html: buildEmailHtml(digest, 'daily', unsubUrl),
+              subject: combinedSubject,
+              html: buildEmailHtml(digest, execSummary, unsubUrl),
               headers: {
                 'List-Unsubscribe': `<mailto:${env.GMAIL_SENDER_EMAIL}?subject=unsubscribe>, <${unsubUrl}>`,
                 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

@@ -24,7 +24,11 @@ npm run test         # Run tests with Vitest
 
 ## Architecture
 
-Cron (04:00 UTC / 07:00 TR) -> Scrape GitHub Trending (3 pages) -> Fetch READMEs -> AI Summarize -> Build HTML Email -> Send via Gmail
+Cron (04:00 UTC / 07:00 TR) -> Scrape GitHub Trending (3 pages) -> Fetch READMEs -> AI Summarize -> Executive Summary -> Build ONE combined HTML Email -> Send via Gmail
+
+One email per run (not one per period). Daily repos get full AI cards; weekly and
+monthly render as compact rows capped at `COMPACT_LIMIT` so the message stays
+under Gmail's ~102KB clipping threshold. A size-guard test enforces this.
 
 ## Secrets (via wrangler secret put)
 

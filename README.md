@@ -26,7 +26,13 @@ npm run test         # Run tests with Vitest
 
 ## Pipeline
 
-Cron (04:00 UTC / 07:00 TR) → scrape GitHub Trending (3 pages) → fetch READMEs → AI summarize → build HTML email → send via Gmail.
+Cron (04:00 UTC / 07:00 TR) → scrape GitHub Trending (3 pages) → fetch READMEs → AI summarize → AI executive summary → build **one** combined HTML email → send via Gmail.
+
+The digest ships as a single email covering all three periods: an executive
+summary, full cards for the daily repos, then compact rows for weekly and
+monthly (capped at `COMPACT_LIMIT`, with the omitted count disclosed in the
+email). That cap keeps the message under Gmail's ~102KB clipping threshold — a
+test asserts it.
 
 ## Secrets (via `wrangler secret put`)
 
