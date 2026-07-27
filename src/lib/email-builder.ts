@@ -113,6 +113,12 @@ function buildSection(title: string, emoji: string, repos: EnrichedRepo[], perio
  */
 export const COMPACT_LIMIT = 15;
 
+/**
+ * Byte budget for the rendered HTML. Gmail clips messages around 102KB, so the
+ * document is kept below that with headroom for the MIME wrapper.
+ */
+export const MAX_HTML_BYTES = 92_000;
+
 function buildCompactRow(repo: EnrichedRepo, rank: number, period: TrendPeriod): string {
   const badge = PERIOD_BADGE[period];
   const desc = repo.description ?? repo.aiSummary?.summary ?? '';
@@ -132,10 +138,11 @@ function buildCompactRow(repo: EnrichedRepo, rank: number, period: TrendPeriod):
     </tr>`;
 }
 
-function buildCompactSection(repos: EnrichedRepo[], period: TrendPeriod): string {
+function buildCompactSection(repos: EnrichedRepo[], period: TrendPeriod, titleOverride?: string): string {
   if (repos.length === 0) return '';
 
-  const meta = PERIOD_META[period];
+  const base = PERIOD_META[period];
+  const meta = { ...base, title: titleOverride ?? base.title };
   const shown = repos.slice(0, COMPACT_LIMIT);
   const omitted = repos.length - shown.length;
   const rows = shown.map((repo, i) => buildCompactRow(repo, i + 1, period)).join('');
@@ -215,13 +222,36 @@ export function buildEmailHtml(
   unsubscribeUrl?: string,
 ): string {
   const totalRepos = digest.daily.length + digest.weekly.length + digest.monthly.length;
-  const body = [
-    execSummary ? buildExecSummarySection(execSummary) : '',
-    buildSection(PERIOD_META.daily.title, PERIOD_META.daily.emoji, digest.daily, 'daily'),
-    buildCompactSection(digest.weekly, 'weekly'),
-    buildCompactSection(digest.monthly, 'monthly'),
-  ].join('');
 
+  // Full AI cards are ~5KB of real content each, so a repo count alone cannot
+  // predict the size. Render, measure, and downgrade the tail of the daily
+  // cards to compact rows until the document fits the budget.
+  let html = '';
+  for (let fullCount = digest.daily.length; ; fullCount--) {
+    const body = [
+      execSummary ? buildExecSummarySection(execSummary) : '',
+      buildSection(
+        PERIOD_META.daily.title,
+        PERIOD_META.daily.emoji,
+        digest.daily.slice(0, fullCount),
+        'daily',
+      ),
+      buildCompactSection(digest.daily.slice(fullCount), 'daily', `${PERIOD_META.daily.title} (devami)`),
+      buildCompactSection(digest.weekly, 'weekly'),
+      buildCompactSection(digest.monthly, 'monthly'),
+    ].join('');
+    html = renderDocument(digest, body, totalRepos, unsubscribeUrl);
+    if (fullCount === 0 || new TextEncoder().encode(html).length <= MAX_HTML_BYTES) break;
+  }
+  return html;
+}
+
+function renderDocument(
+  digest: TrendingDigest,
+  body: string,
+  totalRepos: number,
+  unsubscribeUrl?: string,
+): string {
   return `<!DOCTYPE html>
 <html lang="tr">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>

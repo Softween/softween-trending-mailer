@@ -5,6 +5,7 @@ import {
   buildEmailSubject,
   buildEmailHtml,
   COMPACT_LIMIT,
+  MAX_HTML_BYTES,
 } from '../src/lib/email-builder';
 import type { ExecutiveSummary } from '../src/lib/exec-summary';
 import type { EnrichedRepo, TrendingDigest } from '../src/types';
@@ -155,19 +156,55 @@ describe('buildEmailHtml', () => {
     expect(html).toContain('trends.softween.com');
   });
 
-  it('stays under the Gmail 102KB clipping threshold for a large digest', () => {
-    const period = (prefix: string, n: number) =>
-      Array.from({ length: n }, (_, i) => makeEnrichedRepo({ fullName: `${prefix}/repo-${i}` }));
+  // Production cards carry long Turkish AI copy: a 17-card digest measured
+  // 95,433 bytes live on 2026-07-27. Short synthetic strings hide that, so the
+  // size guard must use realistic content lengths.
+  const makeFatRepo = (fullName: string): EnrichedRepo =>
+    makeEnrichedRepo({
+      fullName,
+      description: 'Gercekci uzunlukta bir repo aciklamasi. '.repeat(3),
+      aiSummary: {
+        summary: 'Bu proje ne yapiyor, nasil calisiyor ve neden onemli oldugunu anlatan uzun bir ozet. '.repeat(5),
+        targetAudience: 'Belirli bir hedef kitle tanimi, birkac cumleyle acikca yazilmis hali. '.repeat(2),
+        highlights: [
+          'Teknik ozellik birinci, gercekci uzunlukta yazilmis bir madde. '.repeat(2),
+          'Teknik ozellik ikinci, gercekci uzunlukta yazilmis bir madde. '.repeat(2),
+          'Teknik ozellik ucuncu, gercekci uzunlukta yazilmis bir madde. '.repeat(2),
+        ],
+        usageExample: 'Somut bir kullanim senaryosu: hangi rol, hangi gorev, hangi fayda. '.repeat(4),
+        category: 'AI/ML',
+      },
+    });
+
+  const fatPeriod = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => makeFatRepo(`${prefix}/repo-${i}`));
+
+  it('stays under the byte budget with realistic content at production scale', () => {
     const html = buildEmailHtml(
       {
-        daily: period('daily', 25),
-        weekly: period('weekly', 75),
-        monthly: period('monthly', 75),
+        daily: fatPeriod('daily', 20),
+        weekly: fatPeriod('weekly', 25),
+        monthly: fatPeriod('monthly', 25),
         generatedAt: '15 Mart 2025, 10:00',
       },
       execSummary,
     );
-    expect(new TextEncoder().encode(html).length).toBeLessThan(102_400);
+    expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(MAX_HTML_BYTES);
+  });
+
+  it('holds the budget even when every period is oversized', () => {
+    const html = buildEmailHtml(
+      {
+        daily: fatPeriod('daily', 75),
+        weekly: fatPeriod('weekly', 75),
+        monthly: fatPeriod('monthly', 75),
+        generatedAt: '15 Mart 2025, 10:00',
+      },
+      execSummary,
+    );
+    expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(MAX_HTML_BYTES);
+    // Degrades by demoting daily cards, not by dropping them silently
+    expect(html).toContain('Gunluk Trending (devami)');
   });
 
   it('renders valid HTML structure', () => {
