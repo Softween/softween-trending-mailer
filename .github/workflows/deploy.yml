@@ -3,6 +3,7 @@ name: Deploy
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 # Least privilege: this workflow does not use GITHUB_TOKEN except for the
@@ -19,12 +20,17 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      # Typecheck and tests gate the deploy; on pull requests the job stops here.
+      - run: npm run typecheck
+      - run: npm test
       # Doppler injects CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID at runtime.
       # The only GitHub-stored secret is a read-only Doppler service token
       # scoped to the softween-trending/prd config. The Cloudflare token never
       # lives in GitHub. Third-party action pinned to a full commit SHA.
       - uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1 # v3
+        if: github.event_name != 'pull_request'
       - name: Deploy Worker
+        if: github.event_name != 'pull_request'
         run: doppler run -- npx wrangler deploy
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
