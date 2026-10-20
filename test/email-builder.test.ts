@@ -7,6 +7,7 @@ import {
   COMPACT_LIMIT,
   MAX_HTML_BYTES,
 } from '../src/lib/email-builder';
+import type { PortfolioMatch } from '../src/lib/portfolio';
 import type { ExecutiveSummary } from '../src/lib/exec-summary';
 import type { EnrichedRepo, TrendingDigest } from '../src/types';
 
@@ -106,20 +107,20 @@ describe('buildEmailHtml', () => {
     expect(html).toContain('daily/repo');
     expect(html).toContain('weekly/repo');
     expect(html).toContain('monthly/repo');
-    expect(html).toContain('Gunluk Trending');
-    expect(html).toContain('Haftalik Trending');
-    expect(html).toContain('Aylik Trending');
+    expect(html).toContain('Günlük Trending');
+    expect(html).toContain('Haftalık Trending');
+    expect(html).toContain('Aylık Trending');
   });
 
   it('renders the executive summary when provided', () => {
     const html = buildEmailHtml(digest, execSummary);
-    expect(html).toContain('Yonetici Ozeti');
+    expect(html).toContain('Yönetici Özeti');
     expect(html).toContain('Gunun one cikan reposu daily/repo.');
     expect(html).toContain('Agent araclari');
   });
 
   it('omits the executive summary block when absent', () => {
-    expect(buildEmailHtml(digest, null)).not.toContain('Yonetici Ozeti');
+    expect(buildEmailHtml(digest, null)).not.toContain('Yönetici Özeti');
   });
 
   it('gives daily repos full AI detail and keeps weekly/monthly compact', () => {
@@ -142,7 +143,7 @@ describe('buildEmailHtml', () => {
     const weeklyHtml = buildEmailHtml({ ...digest, daily: [], weekly: [detailed], monthly: [] }, null);
     expect(weeklyHtml).toContain('detail/repo');
     expect(weeklyHtml).not.toContain('Highlight A');
-    expect(weeklyHtml).not.toContain('KULLANIM ORNEGI');
+    expect(weeklyHtml).not.toContain('KULLANIM ÖRNEĞİ');
   });
 
   it('caps compact lists and discloses how many were left out', () => {
@@ -204,7 +205,77 @@ describe('buildEmailHtml', () => {
     );
     expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(MAX_HTML_BYTES);
     // Degrades by demoting daily cards, not by dropping them silently
-    expect(html).toContain('Gunluk Trending (devami)');
+    expect(html).toContain('Günlük Trending (devami)');
+  });
+
+  it('renders the new Turkish labels', () => {
+    const html = buildEmailHtml(digest, execSummary);
+    expect(html).toContain('Günlük, Haftalık ve Aylık trendler');
+    expect(html).toContain('TEMEL ÖZELLİKLER');
+    expect(html).toContain('KULLANIM ÖRNEĞİ');
+    expect(html).toContain("GitHub'da Gör");
+    expect(html).not.toContain('TEMEL OZELLIKLER');
+    expect(html).not.toContain("GitHub'da Gor");
+  });
+
+  describe('portfolio section', () => {
+    const match = (i: number, use = `Somut kullanim ${i}`): PortfolioMatch => ({
+      repo: `owner/repo-${i}`,
+      projectId: 'glossgo-be',
+      projectLabel: 'glossgo-be',
+      use,
+      url: `https://github.com/owner/repo-${i}`,
+    });
+
+    it('renders after the executive summary and before the daily section', () => {
+      const html = buildEmailHtml(digest, execSummary, undefined, [match(1)]);
+      const exec = html.indexOf('Yönetici Özeti');
+      const port = html.indexOf('Portföy eşleşmesi');
+      const daily = html.indexOf('Günlük Trending');
+      expect(exec).toBeGreaterThan(-1);
+      expect(port).toBeGreaterThan(exec);
+      expect(daily).toBeGreaterThan(port);
+      expect(html).toContain('owner/repo-1');
+      expect(html).toContain('Somut kullanim 1');
+    });
+
+    it('is absent when null, undefined or empty', () => {
+      expect(buildEmailHtml(digest, execSummary, undefined, null)).not.toContain('Portföy eşleşmesi');
+      expect(buildEmailHtml(digest, execSummary)).not.toContain('Portföy eşleşmesi');
+      expect(buildEmailHtml(digest, execSummary, undefined, [])).not.toContain('Portföy eşleşmesi');
+    });
+
+    it('escapes HTML in the use text exactly once', () => {
+      const html = buildEmailHtml(digest, null, undefined, [match(1, 'a < b & <script>x</script>')]);
+      expect(html).toContain('a &lt; b &amp; &lt;script&gt;x&lt;/script&gt;');
+      expect(html).not.toContain('&amp;lt;');
+      expect(html).not.toContain('&amp;amp;');
+      expect(html).not.toContain('<script>');
+    });
+
+    it('keeps the byte budget with an oversized digest and 5 matches', () => {
+      const fat = (prefix: string, n: number) =>
+        Array.from({ length: n }, (_, i) =>
+          makeEnrichedRepo({
+            fullName: `${prefix}/repo-${i}`,
+            aiSummary: {
+              summary: 'Uzun ozet metni burada yer aliyor. '.repeat(10),
+              targetAudience: 'Hedef kitle tanimi. '.repeat(5),
+              highlights: ['Teknik ozellik maddesi gercekci uzunlukta. '.repeat(3)],
+              usageExample: 'Somut kullanim senaryosu. '.repeat(10),
+              category: 'AI/ML',
+            },
+          }),
+        );
+      const html = buildEmailHtml(
+        { daily: fat('daily', 75), weekly: fat('weekly', 75), monthly: fat('monthly', 75), generatedAt: 'x' },
+        execSummary,
+        'https://example.com/unsub',
+        [1, 2, 3, 4, 5].map((i) => match(i, 'Kullanim aciklamasi. '.repeat(9))),
+      );
+      expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(MAX_HTML_BYTES);
+      expect(html).toContain('Portföy eşleşmesi');
+    });
   });
 
   it('renders valid HTML structure', () => {

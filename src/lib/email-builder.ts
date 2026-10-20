@@ -1,5 +1,6 @@
 import type { EnrichedRepo, TrendingDigest } from '../types';
 import type { ExecutiveSummary } from './exec-summary';
+import type { PortfolioMatch } from './portfolio';
 
 export function escapeHtml(str: string): string {
   return str
@@ -17,15 +18,15 @@ export function formatNumber(n: number): string {
 export type TrendPeriod = 'daily' | 'weekly' | 'monthly';
 
 const PERIOD_BADGE: Record<TrendPeriod, { label: string; bg: string; color: string }> = {
-  daily: { label: '📅 Gunluk Trend', bg: '#1a3a2a', color: '#3fb950' },
-  weekly: { label: '📊 Haftalik Trend', bg: '#1a2a3a', color: '#58a6ff' },
-  monthly: { label: '📈 Aylik Trend', bg: '#2a1a3a', color: '#bc8cff' },
+  daily: { label: '📅 Günlük Trend', bg: '#1a3a2a', color: '#3fb950' },
+  weekly: { label: '📊 Haftalık Trend', bg: '#1a2a3a', color: '#58a6ff' },
+  monthly: { label: '📈 Aylık Trend', bg: '#2a1a3a', color: '#bc8cff' },
 };
 
 const PERIOD_META: Record<TrendPeriod, { title: string; emoji: string }> = {
-  daily: { title: 'Gunluk Trending', emoji: '📅' },
-  weekly: { title: 'Haftalik Trending', emoji: '📊' },
-  monthly: { title: 'Aylik Trending', emoji: '📈' },
+  daily: { title: 'Günlük Trending', emoji: '📅' },
+  weekly: { title: 'Haftalık Trending', emoji: '📊' },
+  monthly: { title: 'Aylık Trending', emoji: '📈' },
 };
 
 function buildRepoCard(repo: EnrichedRepo, rank: number, period: TrendPeriod): string {
@@ -71,13 +72,13 @@ function buildRepoCard(repo: EnrichedRepo, rank: number, period: TrendPeriod): s
           </div>
           ${highlightsHtml ? `
           <div style="margin-top:8px;">
-            <div style="color:#7d8590;font-size:12px;font-weight:600;margin-bottom:4px;">TEMEL OZELLIKLER</div>
+            <div style="color:#7d8590;font-size:12px;font-weight:600;margin-bottom:4px;">TEMEL ÖZELLİKLER</div>
             <ul style="margin:0 0 0 16px;padding:0;font-size:13px;list-style:disc;">${highlightsHtml}</ul>
           </div>
           ` : ''}
           ${summary.usageExample ? `
           <div style="margin-top:10px;background:#0d1117;border:1px solid #1f3a1f;border-radius:8px;padding:10px 14px;">
-            <div style="color:#3fb950;font-size:11px;font-weight:600;margin-bottom:4px;">💡 KULLANIM ORNEGI</div>
+            <div style="color:#3fb950;font-size:11px;font-weight:600;margin-bottom:4px;">💡 KULLANIM ÖRNEĞİ</div>
             <div style="color:#c9d1d9;font-size:13px;line-height:1.5;">${escapeHtml(summary.usageExample)}</div>
           </div>
           ` : ''}
@@ -85,7 +86,7 @@ function buildRepoCard(repo: EnrichedRepo, rank: number, period: TrendPeriod): s
 
         <!-- GitHub Link -->
         <div style="margin-top:12px;">
-          <a href="${repo.url}" style="display:inline-block;background:#21262d;color:#58a6ff;font-size:12px;padding:6px 14px;border-radius:6px;text-decoration:none;border:1px solid #30363d;">GitHub'da Gor →</a>
+          <a href="${repo.url}" style="display:inline-block;background:#21262d;color:#58a6ff;font-size:12px;padding:6px 14px;border-radius:6px;text-decoration:none;border:1px solid #30363d;">GitHub'da Gör →</a>
         </div>
       </td>
     </tr>`;
@@ -178,10 +179,31 @@ export function buildExecSummarySection(summary: ExecutiveSummary): string {
   return `
     <tr>
       <td style="padding:24px 20px 4px;">
-        <h2 style="margin:0 0 12px;color:#e6edf3;font-size:20px;font-weight:600;">📋 Yonetici Ozeti</h2>
+        <h2 style="margin:0 0 12px;color:#e6edf3;font-size:20px;font-weight:600;">📋 Yönetici Özeti</h2>
         <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px 18px;">
           <div style="color:#c9d1d9;font-size:14px;line-height:1.6;">${escapeHtml(summary.overview)}</div>
           ${themesHtml}
+        </div>
+      </td>
+    </tr>`;
+}
+
+export function buildPortfolioSection(matches: PortfolioMatch[]): string {
+  const rows = matches
+    .map(
+      (m) => `
+        <div style="margin-top:12px;" data-testid="trending-portfolio-match">
+          <div style="font-size:13px;color:#e6edf3;font-weight:600;"><a href="${escapeHtml(m.url)}" style="color:#58a6ff;text-decoration:none;">${escapeHtml(m.repo)}</a> <span style="color:#7d8590;">→</span> <span style="color:#3fb950;">${escapeHtml(m.projectLabel)}</span></div>
+          <div style="color:#8b949e;font-size:13px;line-height:1.5;">${escapeHtml(m.use)}</div>
+        </div>`,
+    )
+    .join('');
+
+  return `
+    <tr>
+      <td style="padding:24px 20px 4px;">
+        <h2 style="margin:0 0 12px;color:#e6edf3;font-size:20px;font-weight:600;">🧩 Portföy eşleşmesi</h2>
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:4px 18px 16px;">${rows}
         </div>
       </td>
     </tr>`;
@@ -220,6 +242,7 @@ export function buildEmailHtml(
   digest: TrendingDigest,
   execSummary: ExecutiveSummary | null,
   unsubscribeUrl?: string,
+  portfolio?: PortfolioMatch[] | null,
 ): string {
   const totalRepos = digest.daily.length + digest.weekly.length + digest.monthly.length;
 
@@ -230,6 +253,7 @@ export function buildEmailHtml(
   for (let fullCount = digest.daily.length; ; fullCount--) {
     const body = [
       execSummary ? buildExecSummarySection(execSummary) : '',
+      portfolio && portfolio.length > 0 ? buildPortfolioSection(portfolio) : '',
       buildSection(
         PERIOD_META.daily.title,
         PERIOD_META.daily.emoji,
@@ -264,7 +288,7 @@ function renderDocument(
           <tr>
             <td style="padding:32px 20px 16px;text-align:center;border-bottom:1px solid #30363d;">
               <h1 style="margin:0 0 8px;color:#e6edf3;font-size:24px;">🔥 GitHub Trending Digest</h1>
-              <p style="margin:0;color:#7d8590;font-size:14px;">${digest.generatedAt} · Gunluk, Haftalik ve Aylik trendler bir arada · ${totalRepos} repo</p>
+              <p style="margin:0;color:#7d8590;font-size:14px;">${digest.generatedAt} · Günlük, Haftalık ve Aylık trendler bir arada · ${totalRepos} repo</p>
             </td>
           </tr>
 

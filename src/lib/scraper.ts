@@ -6,6 +6,28 @@ function parseNumber(str: string): number {
   return parseInt(str.replace(/,/g, ''), 10) || 0;
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+};
+
+/** Decodes HTML entities in a single pass (so `&amp;lt;` becomes `&lt;`, not `<`). */
+export function decodeEntities(str: string): string {
+  return str.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z]+));/g, (whole, dec, hex, name) => {
+    if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? whole;
+    const code = dec ? parseInt(dec, 10) : parseInt(hex, 16);
+    try {
+      return String.fromCodePoint(code);
+    } catch {
+      return whole;
+    }
+  });
+}
+
+/** Scraped description HTML to plain text: drop tags (keep link text), decode entities. */
+export function htmlToText(html: string): string {
+  return decodeEntities(html.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+}
+
 export function parseTrendingHtml(html: string, _timeRange: TimeRange): TrendingRepo[] {
   const repos: TrendingRepo[] = [];
 
@@ -27,7 +49,7 @@ export function parseTrendingHtml(html: string, _timeRange: TimeRange): Trending
 
     // Extract description
     const descMatch = article.match(/<p class="col-9[^"]*"[^>]*>([\s\S]*?)<\/p>/);
-    const description = descMatch ? descMatch[1].trim() : '';
+    const description = descMatch ? htmlToText(descMatch[1]) : '';
 
     // Extract language
     const langMatch = article.match(/itemprop="programmingLanguage">(.*?)</);

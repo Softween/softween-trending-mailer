@@ -6,6 +6,7 @@ import { summarizeReposBatch } from './lib/ai-summarizer';
 import { buildEmailHtml, buildEmailSubject, buildConfirmEmailHtml } from './lib/email-builder';
 import { sendEmail } from './lib/gmail';
 import { generateExecutiveSummary } from './lib/exec-summary';
+import { generatePortfolioMatches, isInternalRecipient } from './lib/portfolio';
 import { saveSnapshot, getActiveSubscribers } from './lib/db';
 import { generateBlogPost, saveBlogPost } from './lib/blog-generator';
 import { parsePriorityKeywords, sortByPriority } from './lib/priority-ranking';
@@ -159,11 +160,21 @@ async function runDigest(env: Env): Promise<{ success: boolean; repoCount: numbe
       console.log('[digest] No executive summary — sending digest without it');
     }
 
+    // 5.95 Portfolio match: names internal projects and needs, so it goes ONLY to
+    // internal mailboxes (see isInternalRecipient); subscribers get it solely when
+    // their own address is internal. Null-tolerant like the executive summary.
+    const portfolio = await generatePortfolioMatches(env.AI, digest);
+
     // 6. Build and send ONE combined email. Weekly/monthly render as compact
     // rows so the single message stays under Gmail's ~102KB clipping threshold.
     console.log('[digest] Building and sending combined digest email...');
     const now = new Date();
-    const combinedHtml = buildEmailHtml(digest, execSummary);
+    const combinedHtml = buildEmailHtml(
+      digest,
+      execSummary,
+      undefined,
+      isInternalRecipient(env.RECIPIENT_EMAIL) ? portfolio : null,
+    );
     const combinedSubject = buildEmailSubject(now);
     console.log(`[digest] Combined email size: ${combinedHtml.length} bytes`);
     await sendEmail(env, {
@@ -189,7 +200,7 @@ async function runDigest(env: Env): Promise<{ success: boolean; repoCount: numbe
             await sendEmail(env, {
               to: sub.email,
               subject: combinedSubject,
-              html: buildEmailHtml(digest, execSummary, unsubUrl),
+              html: buildEmailHtml(digest, execSummary, unsubUrl, isInternalRecipient(sub.email) ? portfolio : null),
               headers: {
                 'List-Unsubscribe': `<mailto:${env.GMAIL_SENDER_EMAIL}?subject=unsubscribe>, <${unsubUrl}>`,
                 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

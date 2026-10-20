@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTrendingHtml } from '../src/lib/scraper';
+import { parseTrendingHtml, decodeEntities, htmlToText } from '../src/lib/scraper';
 
 const SAMPLE_HTML = `
 <article class="Box-row">
@@ -145,5 +145,31 @@ describe('parseTrendingHtml', () => {
     const repos = parseTrendingHtml(htmlNoDesc, 'daily');
     expect(repos[0].description).toBe('');
     expect(repos[0].language).toBe('Go');
+  });
+});
+
+describe('decodeEntities', () => {
+  it('decodes named entities', () => {
+    expect(decodeEntities('transcription &amp; audiobook')).toBe('transcription & audiobook');
+  });
+
+  it('decodes in a single pass', () => {
+    expect(decodeEntities('&amp;amp;')).toBe('&amp;');
+    expect(decodeEntities('&amp;lt;')).toBe('&lt;');
+  });
+
+  it('decodes numeric entities and leaves unknown ones', () => {
+    expect(decodeEntities('&#39;x&#x27;')).toBe("'x'");
+    expect(decodeEntities('&bogus;')).toBe('&bogus;');
+  });
+});
+
+describe('htmlToText', () => {
+  it('strips tags but keeps link text', () => {
+    expect(
+      htmlToText(
+        'CLI-Hub: <a href="https://clianything.cc/" class="Link--inTextBlock" rel="nofollow">https://clianything.cc/</a>',
+      ),
+    ).toBe('CLI-Hub: https://clianything.cc/');
   });
 });
